@@ -1,0 +1,32 @@
+[
+  {
+    "id": "board-1",
+    "name": "Breakfast Specials",
+    "slug": "breakfast",
+    "boardSlug": "breakfast",
+    "locationSlug": "flagship",
+    "slides": [],
+    "published": true,
+    "dirty": false
+  },
+  {
+    "id": "board-2",
+    "name": "Lunch Favorites",
+    "slug": "lunch",
+    "boardSlug": "lunch",
+    "locationSlug": "flagship",
+    "slides": [],
+    "published": true,
+    "dirty": true
+  },
+  {
+    "id": "board-3",
+    "name": "Evening Bites",
+    "slug": "evening",
+    "boardSlug": "evening",
+    "locationSlug": "campus",
+    "slides": [],
+    "published": false,
+    "dirty": false
+  }
+]
