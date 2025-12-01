@@ -1,0 +1,206 @@
+/* --- CORE STYLES --- */
+body, html { 
+  margin: 0; 
+  height: 100vh; 
+  overflow: hidden; 
+  background: #000; 
+  font-family: system-ui, sans-serif; 
+  color: white;
+  transition: background-color 0.3s ease;
+}
+
+/* Edit mode styles */
+body.edit-mode {
+  background-color: #1a1a1a;
+}
+
+/* Hide edit controls in view mode */
+body:not(.edit-mode) .tile {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Show/hide panels based on edit mode */
+body:not(.edit-mode) .admin-panel-container,
+body:not(.edit-mode) .editor-panel {
+  display: none !important;
+}
+
+/* Edit mode toggle button - always visible for now */
+.edit-mode-toggle-container {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  width: 60px !important;
+  height: 60px !important;
+  background: rgba(255, 0, 0, 0.3) !important; /* Red tint for visibility */
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  z-index: 99999 !important; /* Extremely high z-index */
+  pointer-events: auto !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.edit-mode-toggle-container button {
+  background: none !important;
+  border: none !important;
+  color: white !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Hide in edit mode */
+.edit-mode .edit-mode-toggle-container {
+  display: none !important;
+}
+
+#tilesContainer { 
+  position: relative; 
+  width: 100%; 
+  height: 100%; 
+}
+
+.tile { 
+  position: absolute; 
+  box-sizing: border-box; 
+  user-select: none; 
+  transition: all 0.2s;
+  z-index: 1;
+  /* Make tiles non-interactive in display mode */
+  pointer-events: none;
+}
+
+/* Enable interaction with tiles in edit mode */
+.edit-mode .tile {
+  pointer-events: auto;
+}
+
+.tile.selected {
+  box-shadow: 0 0 0 2px #2196f3, 0 0 10px rgba(33, 150, 243, 0.3);
+  z-index: 10;
+}
+
+/* Resize Handles */
+.tile .resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #2196f3;
+  border: 1px solid white;
+  border-radius: 50%;
+  z-index: 20;
+  display: none;
+}
+
+.edit-mode .tile .resize-handle {
+  display: block;
+}
+
+.tile .resize-handle.nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.tile .resize-handle.ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.tile .resize-handle.sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.tile .resize-handle.se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}
+
+/* Transition only applied in Display Mode to prevent lag in Edit Mode */
+body:not(.edit-mode) .tile { 
+  transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; 
+}
+
+/* Content styling */
+.tile-content-wrapper { 
+  width: 100%; 
+  height: 100%; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  overflow: hidden; 
+}
+
+.tile img, 
+.tile video, 
+.tile iframe, 
+.tile lottie-player { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+  display: block; 
+}
+
+/* Editor Preview Layer */
+.editor-preview-overlay {
+  position: absolute; 
+  top: 0; 
+  left: 0; 
+  width: 100%; 
+  height: 100%;
+  background: rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+}
+
+body:not(.editing) .editor-preview-overlay { 
+  display: none; 
+}
+
+/* Utilities */
+.marquee { 
+  white-space: nowrap; 
+  display: inline-block; 
+  animation: marquee 15s linear infinite; 
+}
+
+@keyframes marquee { 
+  0% { transform: translateX(100%); } 
+  100% { transform: translateX(-100%); } 
+}
+
+/* Slide Logic */
+.slide-hidden { 
+  opacity: 0; 
+  visibility: hidden; 
+  pointer-events: none; 
+  z-index: -1; 
+}
+
+.slide-active { 
+  opacity: 1; 
+  visibility: visible; 
+  z-index: 1; 
+}
+
+/* Editor Styles */
+body.editing #tilesContainer {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+  background-size: 5% 5%;
+}

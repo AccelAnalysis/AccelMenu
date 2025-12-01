@@ -1,0 +1,606 @@
+import { appState } from './services/state.js';
+import { Tile } from './components/Tile.js';
+import { TileEditor } from './components/TileEditor.js';
+import { AdminPanel } from './components/AdminPanel.js';
+import { TILE_TYPES } from './utils/constants.js';
+import { deepClone, generateId } from './utils/helpers.js';
+
+class App {
+  constructor() {
+    this.tiles = [];
+    this.selectedTile = null;
+    this.editor = null;
+    this.adminPanel = null;
+    this.isEditMode = false;
+    
+    // Bind methods
+    this.handleCanvasClick = this.handleCanvasClick.bind(this);
+    this.handleTileSelect = this.handleTileSelect.bind(this);
+    this.handleTileUpdate = this.handleTileUpdate.bind(this);
+    this.deleteSelectedTile = this.deleteSelectedTile.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleAddTile = this.handleAddTile.bind(this);
+    this.handleUpdateTile = this.handleUpdateTile.bind(this);
+    this.handleRemoveTile = this.handleRemoveTile.bind(this);
+    this.addNewTile = this.addNewTile.bind(this);
+    this.toggleEditMode = this.toggleEditMode.bind(this);
+    this.selectTile = this.selectTile.bind(this);
+    
+    this.init();
+  }
+
+  /**
+   * Initialize the application
+   */
+  init() {
+    this.setupUI();
+    this.setupEventListeners();
+    
+    // Initialize editor
+    this.editor = new TileEditor(document.getElementById('tile-editor'), {
+      onUpdate: this.handleTileUpdate,
+      onDelete: () => this.deleteSelectedTile()
+    });
+    
+    // Initialize admin panel
+    this.adminPanel = new AdminPanel(
+      document.getElementById('admin-panel'),
+      this.handleAddTile,
+      this.handleUpdateTile,
+      this.handleRemoveTile
+    );
+    
+    // Load demo tiles after UI is set up
+    this.loadDemoTiles();
+  }
+
+  /**
+   * Set up DOM elements
+   */
+  setupUI() {
+    // Get the app container from the DOM or create it
+    this.container = document.getElementById('app');
+    if (!this.container) {
+      this.container = document.createElement('div');
+      this.container.id = 'app';
+      document.body.appendChild(this.container);
+    }
+    this.container.className = 'app-container';
+    
+    // Create header
+    const header = document.createElement('header');
+    header.className = 'app-header';
+    header.innerHTML = `
+      <h1>AccelMenu Editor</h1>
+      <div class="toolbar">
+        <button id="add-tile-btn" class="btn btn-primary">
+          <span class="icon">+</span> Add Tile
+        </button>
+        <button id="toggle-edit-btn" class="btn btn-secondary">
+          <span class="icon">✏️</span> Edit Mode
+        </button>
+      </div>
+    `;
+    this.container.appendChild(header);
+    
+    // Create main content area
+    const mainContent = document.createElement('div');
+    mainContent.className = 'main-content';
+    
+    // Create admin panel container
+    const adminPanelContainer = document.createElement('div');
+    adminPanelContainer.className = 'admin-panel-container';
+    adminPanelContainer.id = 'admin-panel';
+    
+    // Create canvas for tiles
+    this.canvas = document.createElement('div');
+    this.canvas.className = 'tile-canvas';
+    this.canvas.id = 'tile-canvas';
+    
+    // Create editor panel container
+    const editorPanel = document.createElement('div');
+    editorPanel.className = 'editor-panel';
+    editorPanel.id = 'tile-editor';
+    
+    // Add elements to main content
+    mainContent.appendChild(adminPanelContainer);
+    mainContent.appendChild(this.canvas);
+    mainContent.appendChild(editorPanel);
+    
+    this.container.appendChild(mainContent);
+    
+    // Add to body
+    document.body.appendChild(this.container);
+    
+    // Add some basic styles
+    this.addStyles();
+  }
+
+  /**
+   * Add basic styles
+   */
+  addStyles() {
+    const style = document.createElement('style');
+    style.textContent = `
+      body, html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      
+      .app-container {
+        display: flex;
+        height: 100vh;
+      }
+      
+      .tile-canvas {
+        flex: 1;
+        position: relative;
+        background-color: #f5f5f5;
+        overflow: hidden;
+      }
+      
+      .admin-panel-container {
+        width: 250px;
+        background-color: #f8f9fa;
+        border-right: 1px solid #e0e0e0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .editor-panel {
+        width: 300px;
+        background-color: #fff;
+        border-left: 1px solid #e0e0e0;
+        overflow-y: auto;
+        display: none; /* Hidden by default */
+      }
+      
+      .tile {
+        position: absolute;
+        border: 2px solid transparent;
+        transition: border-color 0.2s;
+      }
+      
+      .tile.selected {
+        border-color: #2196f3;
+        box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.3);
+      }
+      
+      .tile-content {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+        box-sizing: border-box;
+        word-break: break-word;
+        overflow: hidden;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /**
+   * Set up event listeners
+   */
+  /**
+   * Handle canvas click events
+   * @param {MouseEvent} event - The click event
+   */
+  handleCanvasClick(event) {
+    if (!this.isEditMode) return;
+    
+    // Get the click position relative to the canvas
+    const rect = this.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // Check if a tile was clicked
+    const clickedTile = this.tiles.find(tile => tile.isPointInTile(x, y));
+    
+    if (clickedTile) {
+      this.handleTileSelect(clickedTile);
+    } else if (this.selectedTile) {
+      // Deselect the current tile if clicking on empty space
+      this.selectedTile.deselect();
+      this.selectedTile = null;
+    }
+  }
+  
+  `;
+  document.head.appendChild(style);
+}
+
+/**
+ * Set up event listeners
+ */
+/**
+ * Handle canvas click events
+ * @param {MouseEvent} event - The click event
+ */
+handleCanvasClick(event) {
+  if (!this.isEditMode) return;
+  
+  // Get the click position relative to the canvas
+  const rect = this.canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  
+  // Check if a tile was clicked
+  const clickedTile = this.tiles.find(tile => tile.isPointInTile(x, y));
+  
+  if (clickedTile) {
+    this.handleTileSelect(clickedTile);
+  } else if (this.selectedTile) {
+    // Deselect the current tile if clicking on empty space
+    this.selectedTile.deselect();
+    this.selectedTile = null;
+  }
+}
+
+/**
+ * Handle tile selection
+ * @param {Tile} tile - The tile that was selected
+ */
+handleTileSelect(tile) {
+  // Deselect the currently selected tile if there is one
+  if (this.selectedTile && this.selectedTile !== tile) {
+    this.selectedTile.deselect();
+  }
+  
+  // Select the new tile
+  this.selectedTile = tile;
+  tile.select();
+  
+  // If we have an editor, update it with the selected tile
+  if (this.editor) {
+    this.editor.setTile(tile);
+  }
+  
+  // If we have an admin panel, update its selection
+  if (this.adminPanel) {
+    this.adminPanel.setSelectedTile(tile);
+  }
+}
+
+ * Select a tile
+ * @param {Tile} tile - The tile to select
+ */
+selectTile(tile) {
+  // Deselect currently selected tile if it's not the one being selected
+  if (this.selectedTile && this.selectedTile !== tile) {
+    this.selectedTile.deselect();
+  }
+  
+  // Select the new tile if it's not already selected
+  if (tile && !tile.isSelected) {
+    this.selectedTile = tile;
+    tile.select();
+    
+    // If editor exists, update it with the selected tile's properties
+    if (this.editor) {
+      this.editor.setTile(tile);
+    }
+  } else if (!tile) {
+    // If no tile is provided, just deselect the current one
+    if (this.selectedTile) {
+      this.selectedTile.deselect();
+      this.selectedTile = null;
+    }
+  }
+  
+  return this;
+}
+    if (!this.selectedTile) return;
+    
+    // Update the tile with new properties
+    Object.assign(this.selectedTile, updatedProps);
+    
+    // If the tile has a render method, call it to update the display
+    if (typeof this.selectedTile.render === 'function') {
+      this.selectedTile.render();
+    }
+    
+    // If we have an admin panel, refresh its view
+    if (this.adminPanel) {
+      this.adminPanel.refresh();
+    }
+    
+    // Save the updated state if needed
+    this.saveState();
+  }
+
+  setupEventListeners() {
+    // Canvas click handler
+    this.canvas = this.canvas || document.getElementById('canvas');
+    if (this.canvas) {
+      this.canvas.addEventListener('click', this.handleCanvasClick);
+    }
+    
+    // Add tile button
+    const addTileBtn = document.getElementById('add-tile-btn');
+    if (addTileBtn) {
+      addTileBtn.addEventListener('click', () => this.addNewTile());
+    }
+    
+    // Toggle edit mode
+    const toggleEditBtn = document.getElementById('toggle-edit-btn');
+    if (toggleEditBtn) {
+      toggleEditBtn.addEventListener('click', () => this.toggleEditMode());
+    }
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', this.handleKeyDown);
+  }
+
+  /**
+   * Handle keyboard events
+   * @param {KeyboardEvent} event - The keyboard event
+   */
+  handleKeyDown(event) {
+    // Handle delete/backspace key to remove selected tile
+    if ((event.key === 'Delete' || event.key === 'Backspace') && this.selectedTile) {
+      this.deleteSelectedTile();
+    }
+    // Handle escape key to deselect tile
+    else if (event.key === 'Escape' && this.selectedTile) {
+      this.deselectTile();
+    }
+  }
+
+  /**
+   * Load tiles from state or create demo tiles
+   */
+  loadDemoTiles() {
+    // Clear existing tiles
+    this.tiles.forEach(tile => tile.destroy());
+    this.tiles = [];
+    
+    // Add some demo tiles
+    const demoTextTile = this.createTile({
+      id: generateId(),
+      type: TILE_TYPES.TEXT,
+      name: 'Welcome Tile',
+      content: 'Double click to edit this text',
+      position: { x: 50, y: 50, width: 200, height: 100 },
+      styles: {
+        backgroundColor: '#f0f8ff',
+        color: '#333',
+        fontSize: '16px',
+        padding: '10px',
+        borderRadius: '8px',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center'
+      }
+    });
+    
+    const demoImageTile = this.createTile({
+      id: generateId(),
+      type: TILE_TYPES.IMAGE,
+      name: 'Sample Image',
+      content: 'https://picsum.photos/seed/picsum/300/200',
+      position: { x: 300, y: 50, width: 300, height: 200 },
+      styles: {
+        border: '2px solid #ddd',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        objectFit: 'cover'
+      }
+    });
+    
+    // Update app state
+    this.updateAppState();
+    
+    // Update admin panel
+    this.adminPanel.updateTileList(this.tiles);
+  }
+
+  /**
+   * Create a new tile
+   * @param {Object} config - Tile configuration
+   */
+  createTile(config) {
+    const tile = new Tile({
+      ...config,
+      onSelect: (selectedTile) => this.selectTile(selectedTile)
+    });
+    
+    this.tiles.push(tile);
+    this.canvas.appendChild(tile.element);
+    
+    // Update app state
+    this.updateAppState();
+    
+    // Update admin panel
+    this.adminPanel.updateTileList(this.tiles);
+    
+    return tile;
+  }
+  
+  /**
+   * Update the application state
+   */
+  updateAppState() {
+    appState.tiles = this.tiles.map(tile => ({
+      id: tile.id,
+      type: tile.type,
+      content: tile.content,
+      name: tile.name || `Tile ${tile.id.substring(0, 4)}`,
+      position: { ...tile.position },
+      styles: { ...tile.styles }
+    }));
+  }
+  
+  /**
+   * Handle adding a new tile from the admin panel
+   * @param {Object} tileData - New tile data
+   */
+  handleAddTile(tileData) {
+    const newTile = this.createTile({
+      id: tileData.id,
+      type: tileData.type,
+      position: tileData.position,
+      content: tileData.content || '',
+      styles: tileData.styles || {},
+      name: tileData.name || `Tile ${tileData.id.substring(0, 4)}`
+    });
+    
+    // Select the new tile
+    this.selectTile(newTile);
+    
+    return newTile;
+  }
+  
+  /**
+   * Handle updating a tile from the admin panel
+   * @param {string} tileId - ID of the tile to update
+   * @param {Object} updates - Updated properties
+   */
+  handleUpdateTile(tileId, updates) {
+    const tile = this.tiles.find(t => t.id === tileId);
+    if (tile) {
+      tile.update(updates);
+      this.updateAppState();
+      
+      // If this is the selected tile, update the editor
+      if (this.selectedTile && this.selectedTile.id === tileId) {
+        this.editor.show({
+          ...tile,
+          position: { ...tile.position },
+          styles: { ...tile.styles }
+        });
+      }
+    }
+  }
+  
+  /**
+   * Handle removing a tile from the admin panel
+   * @param {string} tileId - ID of the tile to remove
+   */
+  handleRemoveTile(tileId) {
+    const index = this.tiles.findIndex(t => t.id === tileId);
+    if (index !== -1) {
+      const [removedTile] = this.tiles.splice(index, 1);
+      removedTile.destroy();
+      this.updateAppState();
+      
+      // If the removed tile was selected, deselect it
+      if (this.selectedTile && this.selectedTile.id === tileId) {
+        this.deselectTile();
+      }
+    }
+  }
+
+  /**
+   * Select a tile
+   * @param {Tile} tile - The tile to select
+   */
+  selectTile(tile) {
+    // Deselect current tile
+    if (this.selectedTile && this.selectedTile !== tile) {
+      this.selectedTile.deselect();
+    }
+    
+    // Select new tile
+    this.selectedTile = tile;
+    this.selectedTile.select();
+    
+    // Show editor with tile data
+    this.editor.show({
+      ...tile,
+      position: { ...tile.position },
+      styles: { ...tile.styles }
+    });
+    
+    // Show editor container
+    this.editorContainer = this.editorContainer || document.querySelector('.editor-panel');
+    if (this.editorContainer) {
+      this.editorContainer.style.display = 'block';
+    }
+    
+    // Update admin panel selection
+    if (this.adminPanel) {
+      this.adminPanel.selectedTileId = tile.id;
+      this.adminPanel.updateTileList(this.tiles);
+    }
+  }
+
+  /**
+   * Deselect the currently selected tile
+   */
+  deselectTile() {
+    if (this.selectedTile) {
+      this.selectedTile.deselect();
+      this.selectedTile = null;
+    }
+    
+    // Hide editor
+    this.editor.hide();
+    if (this.editorContainer) {
+      this.editorContainer.style.display = 'none';
+    }
+    
+    // Update admin panel selection
+    if (this.adminPanel) {
+      this.adminPanel.selectedTileId = null;
+      this.adminPanel.updateTileList(this.tiles);
+    }
+  }
+
+  /**
+   * Update the selected tile with new properties
+   * @param {Object} updates - Updated tile properties
+   */
+  updateSelectedTile(updates) {
+    if (!this.selectedTile) return;
+    
+    // Update tile
+    this.selectedTile.update(updates);
+    
+    // Update state
+    const index = this.tiles.findIndex(t => t.id === this.selectedTile.id);
+    if (index !== -1) {
+      appState.tiles[index] = {
+        id: this.selectedTile.id,
+        type: this.selectedTile.type,
+        content: this.selectedTile.content,
+        position: { ...this.selectedTile.position },
+        styles: { ...this.selectedTile.styles }
+      };
+    }
+  }
+
+  /**
+   * Delete the currently selected tile
+   */
+  deleteSelectedTile() {
+    if (!this.selectedTile) return;
+    
+    // Remove from DOM
+    this.selectedTile.destroy();
+    
+    // Remove from tiles array
+    const index = this.tiles.findIndex(t => t.id === this.selectedTile.id);
+    if (index !== -1) {
+      this.tiles.splice(index, 1);
+      appState.tiles.splice(index, 1);
+    }
+    
+    // Reset selection
+    this.selectedTile = null;
+    this.deselectTile();
+  }
+}
+
+// Initialize the app when the DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize the app directly since Lottie is loaded in the HTML
+  new App();
+});

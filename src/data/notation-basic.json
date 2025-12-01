@@ -1,0 +1,46 @@
+{
+  "notes": [
+    {
+      "id": "A4",
+      "letter": "A",
+      "midi": 69,
+      "staffPosition": 0
+    },
+    {
+      "id": "B4",
+      "letter": "B",
+      "midi": 71,
+      "staffPosition": 1
+    },
+    {
+      "id": "C5",
+      "letter": "C",
+      "midi": 72,
+      "staffPosition": 2
+    },
+    {
+      "id": "D5",
+      "letter": "D",
+      "midi": 74,
+      "staffPosition": 3
+    },
+    {
+      "id": "E5",
+      "letter": "E",
+      "midi": 76,
+      "staffPosition": 4
+    },
+    {
+      "id": "F5",
+      "letter": "F",
+      "midi": 77,
+      "staffPosition": 5
+    },
+    {
+      "id": "G5",
+      "letter": "G",
+      "midi": 79,
+      "staffPosition": 6
+    }
+  ]
+}
