@@ -7,11 +7,22 @@ export interface Slide {
   description?: string;
   mediaUrl?: string;
   layout?: string;
+  templateId?: string;
   position?: number;
   boardSlug: string;
   locationSlug: string;
   published: boolean;
   dirty: boolean;
+  layers?: EditorLayer[];
+  assets?: EditorAsset[];
+}
+
+export interface Template {
+  id: string;
+  name: string;
+  description?: string;
+  layout: string;
+  previewUrl?: string;
   layers?: EditorLayer[];
   assets?: EditorAsset[];
 }
@@ -41,4 +52,14 @@ export interface SlideStackCacheEntry {
   boardSlug: string;
   slides: Slide[];
   updatedAt: number;
+}
+
+export interface SlideVersion {
+  id: string;
+  slideId: string;
+  label: string;
+  createdAt: string;
+  author?: string;
+  summary?: string;
+  snapshot?: Slide;
 }

@@ -6,7 +6,8 @@ type SlidesByBoard = Record<string, Slide[]>;
 type BoardsAction =
   | { type: 'reorder'; boardSlug: string; activeId: string; overId: string }
   | { type: 'insert'; boardSlug: string; slide: Slide; index?: number }
-  | { type: 'remove'; boardSlug: string; slideId: string };
+  | { type: 'remove'; boardSlug: string; slideId: string }
+  | { type: 'update'; boardSlug: string; slideId: string; updates: Partial<Slide> };
 
 interface BoardsState {
   slidesByBoard: SlidesByBoard;
@@ -17,6 +18,7 @@ interface BoardsContextValue extends BoardsState {
   reorderSlides: (boardSlug: string, activeId: string, overId: string) => void;
   insertSlide: (boardSlug: string, slide: Slide, index?: number) => void;
   removeSlide: (boardSlug: string, slideId: string) => void;
+  updateSlide: (boardSlug: string, slideId: string, updates: Partial<Slide>) => void;
 }
 
 const DEFAULT_MAX_SLIDES = 50;
@@ -73,6 +75,27 @@ function boardsReducer(state: BoardsState, action: BoardsAction): BoardsState {
         },
       };
     }
+    case 'update': {
+      const { boardSlug, slideId, updates } = action;
+      const slides = state.slidesByBoard[boardSlug] ?? [];
+      const updated = slides.map((slide) =>
+        slide.id === slideId
+          ? {
+              ...slide,
+              ...updates,
+              dirty: true,
+            }
+          : slide
+      );
+
+      return {
+        ...state,
+        slidesByBoard: {
+          ...state.slidesByBoard,
+          [boardSlug]: updated,
+        },
+      };
+    }
     default:
       return state;
   }
@@ -103,6 +126,8 @@ export function BoardsProvider({
         dispatch({ type: 'insert', boardSlug, slide, index }),
       removeSlide: (boardSlug, slideId) =>
         dispatch({ type: 'remove', boardSlug, slideId }),
+      updateSlide: (boardSlug, slideId, updates) =>
+        dispatch({ type: 'update', boardSlug, slideId, updates }),
     }),
     [state]
   );
