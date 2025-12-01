@@ -1,0 +1,46 @@
+[
+  {
+    "id": "slide-1",
+    "slug": "fresh-start",
+    "title": "Fresh Start",
+    "description": "Kick off the day with seasonal fruit bowls.",
+    "position": 1,
+    "boardSlug": "breakfast",
+    "locationSlug": "flagship",
+    "published": true,
+    "dirty": false
+  },
+  {
+    "id": "slide-2",
+    "slug": "hearty-omelette",
+    "title": "Hearty Omelette",
+    "description": "Local eggs with roasted veggies and feta.",
+    "position": 2,
+    "boardSlug": "breakfast",
+    "locationSlug": "flagship",
+    "published": true,
+    "dirty": true
+  },
+  {
+    "id": "slide-3",
+    "slug": "grill-cheese",
+    "title": "Grilled Cheese Combo",
+    "description": "Sourdough melt served with tomato soup cup.",
+    "position": 1,
+    "boardSlug": "lunch",
+    "locationSlug": "flagship",
+    "published": false,
+    "dirty": false
+  },
+  {
+    "id": "slide-4",
+    "slug": "late-night-fries",
+    "title": "Late Night Fries",
+    "description": "Crispy fries with house-made aioli trio.",
+    "position": 1,
+    "boardSlug": "evening",
+    "locationSlug": "campus",
+    "published": true,
+    "dirty": false
+  }
+]
