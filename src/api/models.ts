@@ -1,3 +1,5 @@
+import type { EditorAsset, EditorLayer } from '../types/editor';
+
 export interface Slide {
   id: string;
   slug: string;
@@ -10,6 +12,8 @@ export interface Slide {
   locationSlug: string;
   published: boolean;
   dirty: boolean;
+  layers?: EditorLayer[];
+  assets?: EditorAsset[];
 }
 
 export interface MenuBoard {
