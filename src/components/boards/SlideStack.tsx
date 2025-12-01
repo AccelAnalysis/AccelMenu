@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -17,11 +17,12 @@ import {
 } from '@dnd-kit/sortable';
 import { restrictToHorizontalAxis, restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
-import { Slide } from '../../api/models';
+import { Slide, Template } from '../../api/models';
 import {
   createDuplicateSlide,
   useBoardsStore,
 } from '../../store/boards';
+import { TemplateGallery } from '../templates/TemplateGallery';
 
 interface SlideStackProps {
   boardSlug: string;
@@ -35,6 +36,9 @@ interface SortableSlideProps {
   index: number;
   onDuplicate: (slideId: string) => void;
   onDelete: (slideId: string) => void;
+  onApplyTemplate: (slide: Slide) => void;
+  isMenuOpen: boolean;
+  onToggleMenu: (slideId: string) => void;
 }
 
 function SortableSlide({
@@ -43,6 +47,9 @@ function SortableSlide({
   index,
   onDuplicate,
   onDelete,
+  onApplyTemplate,
+  isMenuOpen,
+  onToggleMenu,
 }: SortableSlideProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
@@ -88,20 +95,42 @@ function SortableSlide({
         ) : null}
       </div>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="rounded border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
-          onClick={() => onDuplicate(slide.id)}
-        >
-          Duplicate
-        </button>
-        <button
-          type="button"
-          className="rounded border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-          onClick={() => onDelete(slide.id)}
-        >
-          Delete
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            className="rounded border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+            onClick={() => onToggleMenu(slide.id)}
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+          >
+            Menu
+          </button>
+          {isMenuOpen ? (
+            <div className="absolute right-0 z-20 mt-2 w-40 rounded border border-gray-200 bg-white py-1 text-sm shadow-lg">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                onClick={() => onDuplicate(slide.id)}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                onClick={() => onApplyTemplate(slide)}
+              >
+                Apply template
+              </button>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-700 hover:bg-red-50"
+                onClick={() => onDelete(slide.id)}
+              >
+                Delete
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -112,10 +141,19 @@ export function SlideStack({
   orientation = 'vertical',
   maxSlides,
 }: SlideStackProps) {
-  const { slidesByBoard, reorderSlides, insertSlide, removeSlide, maxSlides: storeMaxSlides } =
-    useBoardsStore();
+  const {
+    slidesByBoard,
+    reorderSlides,
+    insertSlide,
+    removeSlide,
+    updateSlide,
+    maxSlides: storeMaxSlides,
+  } = useBoardsStore();
   const slides = useMemo(() => slidesByBoard[boardSlug] ?? [], [slidesByBoard, boardSlug]);
   const maxAllowed = maxSlides ?? storeMaxSlides;
+  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
+  const [templateTarget, setTemplateTarget] = useState<Slide | null>(null);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -174,6 +212,21 @@ export function SlideStack({
     };
 
     insertSlide(boardSlug, newSlide);
+  };
+
+  const handleApplyTemplate = (template: Template) => {
+    if (!templateTarget) return;
+    setApplyingTemplate(true);
+    updateSlide(boardSlug, templateTarget.id, {
+      templateId: template.id,
+      layout: template.layout,
+      title: templateTarget.title || template.name,
+      description: template.description ?? templateTarget.description,
+      layers: template.layers ?? templateTarget.layers,
+      assets: template.assets ?? templateTarget.assets,
+    });
+    setApplyingTemplate(false);
+    setTemplateTarget(null);
   };
 
   const emptyState = (
@@ -237,6 +290,14 @@ export function SlideStack({
                   orientation={orientation}
                   onDuplicate={handleDuplicate}
                   onDelete={handleDelete}
+                  onApplyTemplate={(target) => {
+                    setTemplateTarget(target);
+                    setMenuOpenFor(null);
+                  }}
+                  isMenuOpen={menuOpenFor === slide.id}
+                  onToggleMenu={(slideId) =>
+                    setMenuOpenFor((current) => (current === slideId ? null : slideId))
+                  }
                 />
               ))}
             </div>
@@ -246,6 +307,19 @@ export function SlideStack({
 
       {slides.length >= maxAllowed ? (
         <p className="text-xs font-medium text-amber-700">Maximum slide count reached.</p>
+      ) : null}
+
+      <TemplateGallery
+        open={Boolean(templateTarget)}
+        onClose={() => setTemplateTarget(null)}
+        onApply={handleApplyTemplate}
+        activeTemplateId={templateTarget?.templateId}
+      />
+
+      {applyingTemplate ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/10 text-sm text-gray-700">
+          Applying template…
+        </div>
       ) : null}
     </div>
   );
