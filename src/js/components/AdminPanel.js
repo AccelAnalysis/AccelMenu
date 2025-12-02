@@ -1,6 +1,5 @@
 import { TILE_TYPES } from '../utils/constants.js';
 import { generateId } from '../utils/helpers.js';
-import { appState } from '../services/state.js';
 
 export class AdminPanel {
   /**
@@ -34,13 +33,20 @@ export class AdminPanel {
     this.container.innerHTML = `
       <div class="admin-panel">
         <div class="admin-header">
-          <h3>Tile Manager</h3>
+          <h3>Workspace</h3>
           <button id="add-tile-btn" class="btn btn-primary">+ Add Tile</button>
+        </div>
+        <div class="slide-stack" id="slide-stack">
+          <div class="section-header">
+            <h4>Slides</h4>
+            <button type="button" class="btn btn-secondary" id="add-slide-btn">+ Slide</button>
+          </div>
+          <div class="slide-stack-list" id="slide-stack-list"></div>
         </div>
         <div class="tile-list" id="tile-list">
           <!-- Tiles will be listed here -->
         </div>
-        <div class="tile-editor" id="tile-editor">
+        <div class="tile-meta" id="tile-meta">
           <div class="editor-header">Tile Properties</div>
           <div class="editor-body" id="tile-properties">
             <p>Select a tile to edit its properties</p>
@@ -51,6 +57,7 @@ export class AdminPanel {
 
     this.tileList = this.container.querySelector('#tile-list');
     this.tileProperties = this.container.querySelector('#tile-properties');
+    this.slideStackList = this.container.querySelector('#slide-stack-list');
   }
 
   /**
@@ -60,6 +67,20 @@ export class AdminPanel {
     this.container.querySelector('#add-tile-btn').addEventListener('click', () => {
       this.showAddTileForm();
     });
+
+    const addSlideBtn = this.container.querySelector('#add-slide-btn');
+    if (addSlideBtn) {
+      addSlideBtn.addEventListener('click', () => {
+        if (typeof this.onAddSlide === 'function') {
+          this.onAddSlide();
+        }
+      });
+    }
+  }
+
+  setSlideHandlers({ onAddSlide, onSelectSlide }) {
+    this.onAddSlide = onAddSlide;
+    this.onSelectSlide = onSelectSlide;
   }
 
   /**
@@ -213,6 +234,37 @@ export class AdminPanel {
       });
 
       this.tileList.appendChild(tileElement);
+    });
+  }
+
+  renderSlideStack(slides = [], currentSlideIndex = 0) {
+    if (!this.slideStackList) return;
+
+    this.slideStackList.innerHTML = '';
+
+    if (!slides.length) {
+      const empty = document.createElement('p');
+      empty.className = 'no-tiles';
+      empty.textContent = 'No slides yet';
+      this.slideStackList.appendChild(empty);
+      return;
+    }
+
+    slides.forEach((slide, index) => {
+      const slideItem = document.createElement('div');
+      slideItem.className = `slide-stack-item ${index === currentSlideIndex ? 'active' : ''}`;
+      slideItem.innerHTML = `
+        <div class="slide-stack-label">${slide.name || `Slide ${index + 1}`}</div>
+        <div class="slide-stack-meta">${slide.tiles?.length || 0} tiles</div>
+      `;
+
+      slideItem.addEventListener('click', () => {
+        if (typeof this.onSelectSlide === 'function') {
+          this.onSelectSlide(index);
+        }
+      });
+
+      this.slideStackList.appendChild(slideItem);
     });
   }
 }

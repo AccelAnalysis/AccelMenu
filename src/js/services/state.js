@@ -126,6 +126,36 @@ class AppState {
   }
 
   // Tile methods
+  removeTile(locationId, boardId, slideIndex, tileId) {
+    const location = this.state.locations[locationId];
+    if (!location || !location.boards[boardId] || !location.boards[boardId].slides[slideIndex]) {
+      return false;
+    }
+
+    const slide = location.boards[boardId].slides[slideIndex];
+    const tileIndex = slide.tiles.findIndex(tile => tile.id === tileId);
+
+    if (tileIndex === -1) return false;
+
+    slide.tiles.splice(tileIndex, 1);
+    location.updatedAt = new Date().toISOString();
+    return true;
+  }
+
+  setSlideTiles(locationId, boardId, slideIndex, tiles) {
+    const location = this.state.locations[locationId];
+    if (!location || !location.boards[boardId] || !location.boards[boardId].slides[slideIndex]) {
+      return false;
+    }
+
+    location.boards[boardId].slides[slideIndex].tiles = tiles.map(tile => ({
+      ...tile,
+      updatedAt: new Date().toISOString()
+    }));
+    location.updatedAt = new Date().toISOString();
+    return true;
+  }
+
   addTile(locationId, boardId, slideIndex, tileData) {
     const location = this.state.locations[locationId];
     if (!location || !location.boards[boardId] || !location.boards[boardId].slides[slideIndex]) {
