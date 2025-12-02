@@ -11,6 +11,9 @@ export interface Slide {
   position?: number;
   boardSlug: string;
   locationSlug: string;
+  status: 'draft' | 'scheduled' | 'published';
+  publishAt?: string | null;
+  expireAt?: string | null;
   published: boolean;
   dirty: boolean;
   layers?: EditorLayer[];

@@ -7,7 +7,8 @@ type BoardsAction =
   | { type: 'reorder'; boardSlug: string; activeId: string; overId: string }
   | { type: 'insert'; boardSlug: string; slide: Slide; index?: number }
   | { type: 'remove'; boardSlug: string; slideId: string }
-  | { type: 'update'; boardSlug: string; slideId: string; updates: Partial<Slide> };
+  | { type: 'update'; boardSlug: string; slideId: string; updates: Partial<Slide> }
+  | { type: 'setBoardSlides'; boardSlug: string; slides: Slide[] };
 
 interface BoardsState {
   slidesByBoard: SlidesByBoard;
@@ -19,6 +20,7 @@ interface BoardsContextValue extends BoardsState {
   insertSlide: (boardSlug: string, slide: Slide, index?: number) => void;
   removeSlide: (boardSlug: string, slideId: string) => void;
   updateSlide: (boardSlug: string, slideId: string, updates: Partial<Slide>) => void;
+  setBoardSlides: (boardSlug: string, slides: Slide[]) => void;
 }
 
 const DEFAULT_MAX_SLIDES = 50;
@@ -96,6 +98,16 @@ function boardsReducer(state: BoardsState, action: BoardsAction): BoardsState {
         },
       };
     }
+    case 'setBoardSlides': {
+      const { boardSlug, slides } = action;
+      return {
+        ...state,
+        slidesByBoard: {
+          ...state.slidesByBoard,
+          [boardSlug]: slides,
+        },
+      };
+    }
     default:
       return state;
   }
@@ -128,6 +140,8 @@ export function BoardsProvider({
         dispatch({ type: 'remove', boardSlug, slideId }),
       updateSlide: (boardSlug, slideId, updates) =>
         dispatch({ type: 'update', boardSlug, slideId, updates }),
+      setBoardSlides: (boardSlug, slides) =>
+        dispatch({ type: 'setBoardSlides', boardSlug, slides }),
     }),
     [state]
   );
@@ -149,6 +163,10 @@ export function createDuplicateSlide(source: Slide): Slide {
     id: `${source.id}-copy-${Date.now()}`,
     slug: `${source.slug}-copy`,
     title: `${source.title} (Copy)`,
+    status: source.status ?? 'draft',
+    publishAt: source.publishAt ?? null,
+    expireAt: source.expireAt ?? null,
     dirty: true,
+    published: false,
   };
 }
