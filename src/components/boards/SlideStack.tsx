@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -24,7 +24,7 @@ import {
 } from '../../store/boards';
 import { TemplateGallery } from '../templates/TemplateGallery';
 import SchedulePanel from './SchedulePanel';
-import { useAuth } from '../../state/authSlice';
+import { cacheDrafts, loadDraftsForBoard } from '../../utils/storage/indexedDb';
 
 interface SlideStackProps {
   boardSlug: string;
@@ -43,7 +43,8 @@ interface SortableSlideProps {
   onSchedule: (slide: Slide) => void;
   isMenuOpen: boolean;
   onToggleMenu: (slideId: string) => void;
-  canDelete: boolean;
+  isVisible: boolean;
+  registerVisibility: (slideId: string, node: HTMLElement | null) => void;
 }
 
 function SortableSlide({
@@ -56,10 +57,12 @@ function SortableSlide({
   onSchedule,
   isMenuOpen,
   onToggleMenu,
-  canDelete,
+  isVisible,
+  registerVisibility,
 }: SortableSlideProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
+  const preloadedAssets = useRef<Set<string>>(new Set());
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -79,9 +82,30 @@ function SortableSlide({
         ? 'Scheduled'
         : 'Draft';
 
+  useEffect(() => {
+    if (!isVisible || !slide.assets?.length) return;
+    const assetsToLoad = slide.assets.filter(
+      (asset) => asset.url && asset.type?.startsWith('image/') && !preloadedAssets.current.has(asset.id)
+    );
+
+    assetsToLoad.forEach((asset) => {
+      const img = new Image();
+      img.src = asset.url;
+      preloadedAssets.current.add(asset.id);
+    });
+  }, [isVisible, slide.assets]);
+
+  const previewUrl = slide.assets?.find((asset) => asset.type?.startsWith('image/'))?.url ?? slide.mediaUrl;
+
+  const handleRef = (node: HTMLElement | null) => {
+    setNodeRef(node);
+    registerVisibility(slide.id, node);
+  };
+
   return (
     <div
-      ref={setNodeRef}
+      ref={handleRef}
+      data-slide-id={slide.id}
       style={style}
       className={`group flex items-center gap-3 rounded border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-400 hover:shadow-md ${
         orientation === 'horizontal' ? 'flex-col min-w-[200px]' : ''
@@ -96,6 +120,13 @@ function SortableSlide({
       >
         ↕
       </button>
+      <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded border border-gray-100 bg-gray-50">
+        {isVisible && previewUrl ? (
+          <img src={previewUrl} alt={slide.title || 'Slide preview'} className="h-full w-full object-cover" />
+        ) : (
+          <span className="text-[10px] font-semibold text-gray-500">Loading preview…</span>
+        )}
+      </div>
       <div className="flex flex-1 flex-col gap-1 text-left">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-semibold text-gray-500">#{index + 1}</p>
@@ -185,6 +216,7 @@ export function SlideStack({
     insertSlide,
     removeSlide,
     updateSlide,
+    setBoardSlides,
     maxSlides: storeMaxSlides,
   } = useBoardsStore();
   const { canDeleteSlides } = useAuth();
@@ -194,6 +226,9 @@ export function SlideStack({
   const [templateTarget, setTemplateTarget] = useState<Slide | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [scheduleTarget, setScheduleTarget] = useState<Slide | null>(null);
+  const [visibleSlides, setVisibleSlides] = useState<Record<string, boolean>>({});
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const slideRefs = useRef<Map<string, HTMLElement | null>>(new Map());
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -201,6 +236,70 @@ export function SlideStack({
 
   const modifiers =
     orientation === 'horizontal' ? [restrictToHorizontalAxis] : [restrictToVerticalAxis];
+
+  useEffect(() => {
+    const existingSlides = slidesByBoard[boardSlug] ?? [];
+    if (existingSlides.length) return;
+
+    let cancelled = false;
+    loadDraftsForBoard(boardSlug)
+      .then((drafts) => {
+        if (!cancelled && drafts.length) {
+          setBoardSlides(boardSlug, drafts);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardSlug, setBoardSlides, slidesByBoard]);
+
+  useEffect(() => {
+    cacheDrafts(boardSlug, slides).catch(() => undefined);
+  }, [boardSlug, slides]);
+
+  useEffect(() => {
+    const ids = new Set(slides.map((slide) => slide.id));
+    slideRefs.current.forEach((node, key) => {
+      if (!ids.has(key)) {
+        if (node && observerRef.current) observerRef.current.unobserve(node);
+        slideRefs.current.delete(key);
+      }
+    });
+    setVisibleSlides((current) => {
+      const next = { ...current };
+      Object.keys(next).forEach((key) => {
+        if (!ids.has(key)) delete next[key];
+      });
+      return next;
+    });
+  }, [slides]);
+
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setVisibleSlides((current) => {
+          const next = { ...current };
+          entries.forEach((entry) => {
+            const targetId = (entry.target as HTMLElement).dataset.slideId;
+            if (targetId && entry.isIntersecting) {
+              next[targetId] = true;
+            }
+          });
+          return next;
+        });
+      },
+      { rootMargin: '120px 0px' }
+    );
+    observerRef.current = observer;
+    slideRefs.current.forEach((node) => {
+      if (node) observer.observe(node);
+    });
+
+    return () => observer.disconnect();
+  }, [slides]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -350,7 +449,13 @@ export function SlideStack({
                   onToggleMenu={(slideId) =>
                     setMenuOpenFor((current) => (current === slideId ? null : slideId))
                   }
-                  canDelete={canDeleteSlides}
+                  isVisible={Boolean(visibleSlides[slide.id])}
+                  registerVisibility={(id, node) => {
+                    slideRefs.current.set(id, node);
+                    if (node && observerRef.current) {
+                      observerRef.current.observe(node);
+                    }
+                  }}
                 />
               ))}
             </div>
