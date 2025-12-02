@@ -24,6 +24,7 @@ import {
 } from '../../store/boards';
 import { TemplateGallery } from '../templates/TemplateGallery';
 import SchedulePanel from './SchedulePanel';
+import { useAuth } from '../../state/authSlice';
 
 interface SlideStackProps {
   boardSlug: string;
@@ -42,6 +43,7 @@ interface SortableSlideProps {
   onSchedule: (slide: Slide) => void;
   isMenuOpen: boolean;
   onToggleMenu: (slideId: string) => void;
+  canDelete: boolean;
 }
 
 function SortableSlide({
@@ -54,6 +56,7 @@ function SortableSlide({
   onSchedule,
   isMenuOpen,
   onToggleMenu,
+  canDelete,
 }: SortableSlideProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
@@ -152,8 +155,13 @@ function SortableSlide({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-700 hover:bg-red-50"
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-red-50 ${
+                  canDelete
+                    ? 'text-red-700'
+                    : 'cursor-not-allowed text-gray-300 hover:bg-transparent'
+                }`}
                 onClick={() => onDelete(slide.id)}
+                disabled={!canDelete}
               >
                 Delete
               </button>
@@ -179,6 +187,7 @@ export function SlideStack({
     updateSlide,
     maxSlides: storeMaxSlides,
   } = useBoardsStore();
+  const { canDeleteSlides } = useAuth();
   const slides = useMemo(() => slidesByBoard[boardSlug] ?? [], [slidesByBoard, boardSlug]);
   const maxAllowed = maxSlides ?? storeMaxSlides;
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
@@ -214,6 +223,11 @@ export function SlideStack({
   };
 
   const handleDelete = (slideId: string) => {
+    if (!canDeleteSlides) {
+      window.alert('You need editor access to delete slides.');
+      return;
+    }
+
     const slide = slides.find((item) => item.id === slideId);
     const confirmMessage = `Delete slide${slide?.title ? ` "${slide.title}"` : ''}? This cannot be undone.`;
     if (window.confirm(confirmMessage)) {
@@ -336,6 +350,7 @@ export function SlideStack({
                   onToggleMenu={(slideId) =>
                     setMenuOpenFor((current) => (current === slideId ? null : slideId))
                   }
+                  canDelete={canDeleteSlides}
                 />
               ))}
             </div>
