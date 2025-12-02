@@ -22,6 +22,7 @@ import {
   createDuplicateSlide,
   useBoardsStore,
 } from '../../store/boards';
+import { useAuth } from '../../state/authSlice';
 import { TemplateGallery } from '../templates/TemplateGallery';
 import SchedulePanel from './SchedulePanel';
 import { cacheDrafts, loadDraftsForBoard } from '../../utils/storage/indexedDb';
@@ -45,6 +46,7 @@ interface SortableSlideProps {
   onToggleMenu: (slideId: string) => void;
   isVisible: boolean;
   registerVisibility: (slideId: string, node: HTMLElement | null) => void;
+  canDelete: boolean;
 }
 
 function SortableSlide({
@@ -59,6 +61,7 @@ function SortableSlide({
   onToggleMenu,
   isVisible,
   registerVisibility,
+  canDelete,
 }: SortableSlideProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: slide.id });
@@ -456,6 +459,7 @@ export function SlideStack({
                       observerRef.current.observe(node);
                     }
                   }}
+                  canDelete={canDeleteSlides}
                 />
               ))}
             </div>
