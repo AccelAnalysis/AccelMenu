@@ -1,4 +1,5 @@
 import { roleAtLeast, UserRole } from '../state/authSlice';
+import { getPrimaryLocationSlug, isMultiLocationEnabled } from '../utils/featureFlags';
 
 export interface RouteMatch {
   name: 'locationBoard' | 'unknown' | 'unauthorized';
@@ -19,14 +20,16 @@ interface RouteDefinition {
 const boardRoutePattern = /^\/locations\/([^/]+)\/boards\/([^/]+)\/?$/;
 const editorRoles: UserRole[] = ['owner', 'admin', 'editor'];
 
-export const routes: RouteDefinition[] = [
-  {
-    name: 'locationBoard' as const,
-    path: '/locations/:locationSlug/boards/:boardSlug',
-    pattern: boardRoutePattern,
-    allowedRoles: editorRoles,
-  },
-];
+export const routes: RouteDefinition[] = isMultiLocationEnabled()
+  ? [
+      {
+        name: 'locationBoard' as const,
+        path: '/locations/:locationSlug/boards/:boardSlug',
+        pattern: boardRoutePattern,
+        allowedRoles: editorRoles,
+      },
+    ]
+  : [];
 
 function isRouteAllowed(role: UserRole, allowedRoles?: UserRole[]) {
   if (!allowedRoles || allowedRoles.length === 0) return true;
@@ -41,6 +44,14 @@ export function resolveRoute(pathname: string, role: UserRole = 'viewer'): Route
   const boardMatch = normalized.match(boardRoutePattern);
   if (boardMatch) {
     const [, locationSlug, boardSlug] = boardMatch;
+
+    if (!isMultiLocationEnabled()) {
+      const primarySlug = getPrimaryLocationSlug();
+      if (primarySlug && primarySlug !== locationSlug) {
+        return { name: 'unknown' };
+      }
+    }
+
     const route = routes.find((entry) => entry.name === 'locationBoard');
     if (route && !isRouteAllowed(role, route.allowedRoles)) {
       return {
