@@ -15,7 +15,10 @@ class App {
     this.adminPanel = null;
     this.isEditMode = false;
     this.monitoringReady = initializeMonitoring({ tracesSampleRate: 0.05 });
-    
+    this.locationSelect = null;
+    this.boardSelect = null;
+    this.slideSelect = null;
+
     // Bind methods
     this.handleCanvasClick = this.handleCanvasClick.bind(this);
     this.handleTileSelect = this.handleTileSelect.bind(this);
@@ -29,6 +32,16 @@ class App {
     this.toggleEditMode = this.toggleEditMode.bind(this);
     this.selectTile = this.selectTile.bind(this);
     this.deselectTile = this.deselectTile.bind(this);
+    this.handleSlideSelect = this.handleSlideSelect.bind(this);
+    this.handleLocationChange = this.handleLocationChange.bind(this);
+    this.handleBoardChange = this.handleBoardChange.bind(this);
+    this.handleSlideChange = this.handleSlideChange.bind(this);
+    this.addLocation = this.addLocation.bind(this);
+    this.addBoard = this.addBoard.bind(this);
+    this.addSlide = this.addSlide.bind(this);
+    this.togglePanelVisibility = this.togglePanelVisibility.bind(this);
+    this.loadCurrentSlideTiles = this.loadCurrentSlideTiles.bind(this);
+    this.refreshNavigationUI = this.refreshNavigationUI.bind(this);
     
     this.init();
   }
@@ -54,8 +67,15 @@ class App {
       this.handleUpdateTile,
       this.handleRemoveTile
     );
-    
+
+    this.adminPanel.setSlideHandlers({
+      onAddSlide: this.addSlide,
+      onSelectSlide: this.handleSlideSelect
+    });
+
     // Load demo tiles after UI is set up
+    this.refreshNavigationUI();
+    this.loadCurrentSlideTiles();
     this.loadDemoTiles();
   }
 
@@ -71,7 +91,80 @@ class App {
       document.body.appendChild(this.container);
     }
     this.container.className = 'app-container';
-    
+
+    const header = document.createElement('div');
+    header.className = 'app-header';
+
+    const brand = document.createElement('div');
+    brand.className = 'brand';
+    brand.textContent = 'AccelMenu Admin';
+
+    const navControls = document.createElement('div');
+    navControls.className = 'nav-controls';
+
+    // Location selector
+    this.locationSelect = document.createElement('select');
+    this.locationSelect.id = 'location-select';
+    this.locationSelect.addEventListener('change', this.handleLocationChange);
+    const addLocationBtn = document.createElement('button');
+    addLocationBtn.className = 'btn btn-secondary';
+    addLocationBtn.textContent = '+ Location';
+    addLocationBtn.addEventListener('click', this.addLocation);
+
+    // Board selector
+    this.boardSelect = document.createElement('select');
+    this.boardSelect.id = 'board-select';
+    this.boardSelect.addEventListener('change', this.handleBoardChange);
+    const addBoardBtn = document.createElement('button');
+    addBoardBtn.className = 'btn btn-secondary';
+    addBoardBtn.textContent = '+ Board';
+    addBoardBtn.addEventListener('click', this.addBoard);
+
+    // Slide selector
+    this.slideSelect = document.createElement('select');
+    this.slideSelect.id = 'slide-select';
+    this.slideSelect.addEventListener('change', this.handleSlideChange);
+    const addSlideBtn = document.createElement('button');
+    addSlideBtn.className = 'btn btn-secondary';
+    addSlideBtn.textContent = '+ Slide';
+    addSlideBtn.addEventListener('click', this.addSlide);
+
+    const panelToggles = document.createElement('div');
+    panelToggles.className = 'panel-toggles';
+    const toggleAdminBtn = document.createElement('button');
+    toggleAdminBtn.className = 'btn btn-secondary';
+    toggleAdminBtn.id = 'toggle-admin-panel';
+    toggleAdminBtn.textContent = 'Toggle Left Panel';
+    toggleAdminBtn.addEventListener('click', () => this.togglePanelVisibility('admin'));
+
+    const toggleEditorBtn = document.createElement('button');
+    toggleEditorBtn.className = 'btn btn-secondary';
+    toggleEditorBtn.id = 'toggle-editor-panel';
+    toggleEditorBtn.textContent = 'Toggle Right Panel';
+    toggleEditorBtn.addEventListener('click', () => this.togglePanelVisibility('editor'));
+
+    panelToggles.appendChild(toggleAdminBtn);
+    panelToggles.appendChild(toggleEditorBtn);
+
+    [
+      ['Location', this.locationSelect, addLocationBtn],
+      ['Board', this.boardSelect, addBoardBtn],
+      ['Slide', this.slideSelect, addSlideBtn]
+    ].forEach(([label, select, button]) => {
+      const group = document.createElement('div');
+      group.className = 'nav-group';
+      const groupLabel = document.createElement('span');
+      groupLabel.textContent = label;
+      group.appendChild(groupLabel);
+      group.appendChild(select);
+      group.appendChild(button);
+      navControls.appendChild(group);
+    });
+
+    header.appendChild(brand);
+    header.appendChild(navControls);
+    header.appendChild(panelToggles);
+
     // Create main content area
     const mainContent = document.createElement('div');
     mainContent.className = 'main-content';
@@ -95,7 +188,8 @@ class App {
     mainContent.appendChild(adminPanelContainer);
     mainContent.appendChild(this.canvas);
     mainContent.appendChild(editorPanel);
-    
+
+    this.container.appendChild(header);
     this.container.appendChild(mainContent);
     
     // Add to body
@@ -121,8 +215,9 @@ class App {
       .app-container {
         display: flex;
         height: 100vh;
+        flex-direction: column;
       }
-      
+
       .tile-canvas {
         flex: 1;
         position: relative;
@@ -137,14 +232,27 @@ class App {
         overflow-y: auto;
         display: flex;
         flex-direction: column;
+        transition: width 0.2s ease, opacity 0.2s ease;
+        min-width: 200px;
       }
-      
+
       .editor-panel {
         width: 300px;
         background-color: #fff;
         border-left: 1px solid #e0e0e0;
         overflow-y: auto;
         display: none; /* Hidden by default */
+        transition: width 0.2s ease, opacity 0.2s ease;
+      }
+
+      .admin-panel-container.collapsed,
+      .editor-panel.collapsed {
+        width: 0;
+        min-width: 0;
+        opacity: 0;
+        pointer-events: none;
+        overflow: hidden;
+        border: none;
       }
       
       .tile {
@@ -171,18 +279,58 @@ class App {
       }
       
       .app-header {
-        background-color: #2196f3;
+        background-color: #0f172a;
         color: white;
-        padding: 10px 20px;
+        padding: 10px 16px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        gap: 12px;
       }
-      
+
       .toolbar {
         display: flex;
         gap: 10px;
+      }
+
+      .brand {
+        font-weight: 700;
+      }
+
+      .nav-controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex: 1;
+        flex-wrap: wrap;
+      }
+
+      .nav-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255,255,255,0.05);
+        padding: 6px 8px;
+        border-radius: 8px;
+      }
+
+      .nav-group span {
+        font-size: 12px;
+        color: #cbd5e1;
+      }
+
+      .nav-group select {
+        padding: 6px;
+        border-radius: 6px;
+        border: 1px solid #334155;
+        background: #0b1224;
+        color: #e2e8f0;
+      }
+
+      .panel-toggles {
+        display: flex;
+        gap: 8px;
       }
       
       .btn {
@@ -210,6 +358,47 @@ class App {
         display: flex;
         flex: 1;
         overflow: hidden;
+      }
+
+      .slide-stack {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 12px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .slide-stack-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .slide-stack-item {
+        padding: 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .slide-stack-item.active {
+        border-color: #2196f3;
+        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15);
+      }
+
+      .slide-stack-label {
+        font-weight: 600;
+      }
+
+      .slide-stack-meta {
+        font-size: 12px;
+        color: #6b7280;
       }
     `;
     document.head.appendChild(style);
@@ -452,9 +641,84 @@ class App {
     } catch (error) {
       console.error('Error adding toggle to DOM:', error);
     }
-    
+
     // Keyboard shortcuts
     document.addEventListener('keydown', this.handleKeyDown);
+  }
+
+  handleLocationChange(event) {
+    const nextLocationId = event.target.value;
+    const changed = appState.setCurrentLocation(nextLocationId);
+    if (changed) {
+      this.refreshNavigationUI();
+      this.loadCurrentSlideTiles();
+    }
+  }
+
+  handleBoardChange(event) {
+    const nextBoardId = event.target.value;
+    const changed = appState.setCurrentBoard(nextBoardId);
+    if (changed) {
+      this.refreshNavigationUI();
+      this.loadCurrentSlideTiles();
+    }
+  }
+
+  handleSlideChange(event) {
+    const index = parseInt(event.target.value, 10);
+    this.handleSlideSelect(index);
+  }
+
+  handleSlideSelect(index) {
+    const changed = appState.setCurrentSlide(index);
+    if (changed) {
+      this.refreshNavigationUI();
+      this.loadCurrentSlideTiles();
+    }
+  }
+
+  addLocation() {
+    const name = prompt('Location name');
+    const newName = name?.trim() || 'New Location';
+    const locationId = appState.addLocation(newName);
+    const boardId = appState.addBoard(locationId, 'Main Board');
+    appState.addSlide(locationId, boardId, 'New Slide');
+    appState.setCurrentLocation(locationId);
+    appState.setCurrentBoard(boardId);
+    appState.setCurrentSlide(0);
+    this.refreshNavigationUI();
+    this.loadCurrentSlideTiles();
+  }
+
+  addBoard() {
+    const { currentLocationId } = appState.state;
+    if (!currentLocationId) return;
+
+    const name = prompt('Board name');
+    const boardId = appState.addBoard(currentLocationId, name?.trim() || 'New Board');
+    if (boardId) {
+      const slides = appState.state.locations[currentLocationId]?.boards[boardId]?.slides || [];
+      if (!slides.length) {
+        appState.addSlide(currentLocationId, boardId, 'New Slide');
+      }
+    }
+    appState.setCurrentBoard(boardId);
+    appState.setCurrentSlide(0);
+    this.refreshNavigationUI();
+    this.loadCurrentSlideTiles();
+  }
+
+  addSlide() {
+    const { currentLocationId, currentBoardId } = appState.state;
+    if (!currentLocationId || !currentBoardId) return;
+
+    const name = prompt('Slide name');
+    const slideId = appState.addSlide(currentLocationId, currentBoardId, name?.trim() || 'New Slide');
+    const board = appState.state.locations[currentLocationId]?.boards[currentBoardId];
+    const slideIndex = board?.slides.findIndex(slide => slide.id === slideId) ?? 0;
+    appState.setCurrentSlide(slideIndex);
+    this.refreshNavigationUI();
+    this.loadCurrentSlideTiles();
   }
 
   /**
@@ -526,6 +790,11 @@ class App {
    * Load tiles from state or create demo tiles
    */
   loadDemoTiles() {
+    const slide = appState.getCurrentSlide();
+    if (slide?.tiles?.length) {
+      return;
+    }
+
     // Clear existing tiles
     this.tiles.forEach(tile => tile.destroy());
     this.tiles = [];
@@ -600,16 +869,109 @@ class App {
    * Update the application state
    */
   updateAppState() {
-    appState.tiles = this.tiles.map(tile => ({
-      id: tile.id,
-      type: tile.type,
-      content: tile.content,
-      name: tile.name || `Tile ${tile.id.substring(0, 4)}`,
-      position: { ...tile.position },
-      styles: { ...tile.styles }
-    }));
+    const { currentLocationId, currentBoardId, currentSlideIndex } = appState.state;
+    if (!currentLocationId || !currentBoardId) return;
+
+    appState.setSlideTiles(
+      currentLocationId,
+      currentBoardId,
+      currentSlideIndex,
+      this.tiles.map(tile => ({
+        id: tile.id,
+        type: tile.type,
+        content: tile.content,
+        name: tile.name || `Tile ${tile.id.substring(0, 4)}`,
+        position: { ...tile.position },
+        styles: { ...tile.styles }
+      }))
+    );
   }
-  
+
+  loadCurrentSlideTiles() {
+    // Remove any existing tiles from canvas
+    this.tiles.forEach(tile => tile.destroy());
+    this.tiles = [];
+
+    if (this.selectedTile) {
+      this.selectedTile.deselect();
+      this.selectedTile = null;
+    }
+
+    if (this.editor) {
+      this.editor.hide();
+    }
+
+    const state = appState.getCurrentState();
+    const slide = state.currentSlide;
+
+    if (slide?.tiles?.length) {
+      slide.tiles.forEach(tileData => {
+        this.createTile(deepClone(tileData));
+      });
+    }
+
+    if (this.adminPanel) {
+      this.adminPanel.updateTileList(this.tiles);
+      this.adminPanel.renderSlideStack(state.currentBoard?.slides || [], state.currentSlideIndex || 0);
+    }
+  }
+
+  refreshNavigationUI() {
+    const state = appState.getCurrentState();
+
+    if (this.locationSelect) {
+      this.locationSelect.innerHTML = '';
+      Object.values(state.locations).forEach(location => {
+        const option = document.createElement('option');
+        option.value = location.id;
+        option.textContent = location.name;
+        option.selected = location.id === state.currentLocationId;
+        this.locationSelect.appendChild(option);
+      });
+    }
+
+    if (this.boardSelect) {
+      this.boardSelect.innerHTML = '';
+      const boards = state.currentLocation?.boards || {};
+      Object.values(boards).forEach(board => {
+        const option = document.createElement('option');
+        option.value = board.id;
+        option.textContent = board.name;
+        option.selected = board.id === state.currentBoardId;
+        this.boardSelect.appendChild(option);
+      });
+    }
+
+    if (this.slideSelect) {
+      this.slideSelect.innerHTML = '';
+      const slides = state.currentBoard?.slides || [];
+      slides.forEach((slide, index) => {
+        const option = document.createElement('option');
+        option.value = `${index}`;
+        option.textContent = slide.name || `Slide ${index + 1}`;
+        option.selected = index === state.currentSlideIndex;
+        this.slideSelect.appendChild(option);
+      });
+    }
+
+    if (this.adminPanel) {
+      this.adminPanel.renderSlideStack(state.currentBoard?.slides || [], state.currentSlideIndex || 0);
+    }
+  }
+
+  togglePanelVisibility(panel) {
+    const adminPanel = document.querySelector('.admin-panel-container');
+    const editorPanel = document.querySelector('.editor-panel');
+
+    if (panel === 'admin' && adminPanel) {
+      adminPanel.classList.toggle('collapsed');
+    }
+
+    if (panel === 'editor' && editorPanel) {
+      editorPanel.classList.toggle('collapsed');
+    }
+  }
+
   /**
    * Add a new tile with default properties
    */
@@ -728,8 +1090,12 @@ class App {
     if (index !== -1) {
       const [removedTile] = this.tiles.splice(index, 1);
       removedTile.destroy();
+      const { currentLocationId, currentBoardId, currentSlideIndex } = appState.state;
+      if (currentLocationId && currentBoardId) {
+        appState.removeTile(currentLocationId, currentBoardId, currentSlideIndex, tileId);
+      }
       this.updateAppState();
-      
+
       // If the removed tile was selected, deselect it
       if (this.selectedTile && this.selectedTile.id === tileId) {
         this.deselectTile();
@@ -828,14 +1194,18 @@ class App {
    */
   deleteSelectedTile() {
     if (!this.selectedTile) return;
-    
+
     // Remove from DOM
     this.selectedTile.destroy();
-    
+
     // Remove from tiles array
     const index = this.tiles.findIndex(t => t.id === this.selectedTile.id);
     if (index !== -1) {
-      this.tiles.splice(index, 1);
+      const removed = this.tiles.splice(index, 1);
+      const { currentLocationId, currentBoardId, currentSlideIndex } = appState.state;
+      if (removed.length && currentLocationId && currentBoardId) {
+        appState.removeTile(currentLocationId, currentBoardId, currentSlideIndex, removed[0].id);
+      }
       this.updateAppState();
     }
     
