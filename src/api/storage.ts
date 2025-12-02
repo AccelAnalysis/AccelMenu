@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { EditorAsset } from '../types/editor';
+import { cacheAssetMetadataFromFile } from '../utils/storage/indexedDb';
+import { processImage } from '../utils/image/processor';
 
 export interface UploadProgress {
   assetName: string;
@@ -9,11 +11,19 @@ export interface UploadProgress {
 export function useStorage() {
   const [uploads, setUploads] = useState<UploadProgress[]>([]);
 
-  const uploadAsset = useCallback(async (file: File): Promise<string> => {
+  const uploadAsset = useCallback(async (
+    file: File
+  ): Promise<{ url: string; file: File; id: string }> => {
     const id = `${file.name}-${Date.now()}`;
     setUploads((prev) => [...prev, { assetName: file.name, progress: 0 }]);
 
-    const url = URL.createObjectURL(file);
+    const processedFile = await processImage(file, {
+      maxWidth: 1920,
+      maxHeight: 1080,
+      quality: 0.85,
+    });
+
+    const url = URL.createObjectURL(processedFile);
 
     await new Promise<void>((resolve) => {
       const steps = 5;
@@ -35,12 +45,15 @@ export function useStorage() {
     });
 
     setUploads((prev) => prev.filter((item) => item.assetName !== file.name));
-    return url || id;
+
+    cacheAssetMetadataFromFile(file, processedFile, id).catch(() => undefined);
+
+    return { url: url || id, file: processedFile, id };
   }, []);
 
-  const mapFileToAsset = useCallback((file: File, url: string): EditorAsset => {
+  const mapFileToAsset = useCallback((file: File, url: string, id?: string): EditorAsset => {
     return {
-      id: `${file.name}-${Date.now()}`,
+      id: id ?? `${file.name}-${Date.now()}`,
       name: file.name,
       url,
       type: file.type,

@@ -13,14 +13,14 @@ export function AssetBar() {
       if (!files?.length) return;
 
       for (const file of Array.from(files)) {
-        const url = await uploadAsset(file);
-        const asset = mapFileToAsset(file, url);
+        const { url, file: processedFile, id } = await uploadAsset(file);
+        const asset = mapFileToAsset(processedFile, url, id);
         addAsset(asset);
 
-        if (file.type.startsWith('image/') && activeSlideId) {
+        if (processedFile.type.startsWith('image/') && activeSlideId) {
           addLayer({
             type: 'image',
-            name: file.name,
+            name: processedFile.name,
             assetUrl: url,
             transform: { x: 60, y: 60, width: 240, height: 180 },
             opacity: 1,
