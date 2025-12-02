@@ -23,9 +23,11 @@ import {
   useBoardsStore,
 } from '../../store/boards';
 import { TemplateGallery } from '../templates/TemplateGallery';
+import SchedulePanel from './SchedulePanel';
 
 interface SlideStackProps {
   boardSlug: string;
+  locationSlug?: string;
   orientation?: 'vertical' | 'horizontal';
   maxSlides?: number;
 }
@@ -37,6 +39,7 @@ interface SortableSlideProps {
   onDuplicate: (slideId: string) => void;
   onDelete: (slideId: string) => void;
   onApplyTemplate: (slide: Slide) => void;
+  onSchedule: (slide: Slide) => void;
   isMenuOpen: boolean;
   onToggleMenu: (slideId: string) => void;
 }
@@ -48,6 +51,7 @@ function SortableSlide({
   onDuplicate,
   onDelete,
   onApplyTemplate,
+  onSchedule,
   isMenuOpen,
   onToggleMenu,
 }: SortableSlideProps) {
@@ -59,8 +63,18 @@ function SortableSlide({
     transition,
   };
 
-  const badgeColor = slide.published ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700';
-  const badgeLabel = slide.published ? 'Published' : 'Draft';
+  const badgeColor =
+    slide.status === 'published'
+      ? 'bg-green-100 text-green-700'
+      : slide.status === 'scheduled'
+        ? 'bg-blue-100 text-blue-700'
+        : 'bg-amber-100 text-amber-700';
+  const badgeLabel =
+    slide.status === 'published'
+      ? 'Published'
+      : slide.status === 'scheduled'
+        ? 'Scheduled'
+        : 'Draft';
 
   return (
     <div
@@ -93,6 +107,14 @@ function SortableSlide({
         {slide.description ? (
           <p className="line-clamp-2 text-xs text-gray-600">{slide.description}</p>
         ) : null}
+        {slide.publishAt ? (
+          <p className="text-[11px] text-gray-500">
+            Publishes {new Date(slide.publishAt).toLocaleString()}
+          </p>
+        ) : null}
+        {slide.expireAt ? (
+          <p className="text-[11px] text-gray-500">Expires {new Date(slide.expireAt).toLocaleString()}</p>
+        ) : null}
       </div>
       <div className="flex items-center gap-2">
         <div className="relative">
@@ -123,6 +145,13 @@ function SortableSlide({
               </button>
               <button
                 type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                onClick={() => onSchedule(slide)}
+              >
+                Schedule
+              </button>
+              <button
+                type="button"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-700 hover:bg-red-50"
                 onClick={() => onDelete(slide.id)}
               >
@@ -138,6 +167,7 @@ function SortableSlide({
 
 export function SlideStack({
   boardSlug,
+  locationSlug,
   orientation = 'vertical',
   maxSlides,
 }: SlideStackProps) {
@@ -154,6 +184,7 @@ export function SlideStack({
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
   const [templateTarget, setTemplateTarget] = useState<Slide | null>(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [scheduleTarget, setScheduleTarget] = useState<Slide | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -203,7 +234,10 @@ export function SlideStack({
       title: `Slide ${nextIndex}`,
       description: 'New slide description',
       boardSlug,
-      locationSlug: '',
+      locationSlug: locationSlug ?? '',
+      status: 'draft',
+      publishAt: null,
+      expireAt: null,
       published: false,
       dirty: true,
       mediaUrl: '',
@@ -294,6 +328,10 @@ export function SlideStack({
                     setTemplateTarget(target);
                     setMenuOpenFor(null);
                   }}
+                  onSchedule={(target) => {
+                    setScheduleTarget(target);
+                    setMenuOpenFor(null);
+                  }}
                   isMenuOpen={menuOpenFor === slide.id}
                   onToggleMenu={(slideId) =>
                     setMenuOpenFor((current) => (current === slideId ? null : slideId))
@@ -314,6 +352,14 @@ export function SlideStack({
         onClose={() => setTemplateTarget(null)}
         onApply={handleApplyTemplate}
         activeTemplateId={templateTarget?.templateId}
+      />
+
+      <SchedulePanel
+        open={Boolean(scheduleTarget)}
+        slide={scheduleTarget}
+        boardSlug={boardSlug}
+        locationSlug={locationSlug ?? scheduleTarget?.locationSlug}
+        onClose={() => setScheduleTarget(null)}
       />
 
       {applyingTemplate ? (

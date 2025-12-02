@@ -21,6 +21,21 @@ const templateStore: Template[] = [
 
 const versionStore: Record<string, SlideVersion[]> = {};
 
+function normalizeSlide(slide: Slide): Slide {
+  const status = slide.status ?? (slide.published ? 'published' : 'draft');
+  return {
+    publishAt: slide.publishAt ?? null,
+    expireAt: slide.expireAt ?? null,
+    ...slide,
+    status,
+    published: slide.published ?? status === 'published',
+  };
+}
+
+function normalizeSlides(slides: Slide[]): Slide[] {
+  return slides.map(normalizeSlide);
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`);
   if (!response.ok) {
@@ -29,9 +44,27 @@ async function fetchJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function simulateNetworkLatency<T>(response: T, delayMs = 150): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(response), delayMs));
+}
+
+function updateCachedSlides(
+  locationSlug: string,
+  boardSlug: string,
+  updater: (slides: Slide[]) => Slide[]
+) {
+  const cacheKey = `${locationSlug}/${boardSlug}`;
+  const currentSlides = slideCache.get(cacheKey) ?? [];
+  const normalizedCurrent = normalizeSlides(currentSlides);
+  const nextSlides = normalizeSlides(updater(normalizedCurrent));
+  slideCache.set(cacheKey, nextSlides);
+
+  return { previous: normalizedCurrent, updated: nextSlides };
+}
+
 export function cacheSlides(locationSlug: string, boardSlug: string, slides: Slide[]): void {
   const cacheKey = `${locationSlug}/${boardSlug}`;
-  slideCache.set(cacheKey, slides);
+  slideCache.set(cacheKey, normalizeSlides(slides));
 }
 
 export function getCachedSlides(locationSlug: string, boardSlug: string): Slide[] | undefined {
@@ -66,6 +99,9 @@ function ensureVersionSeed(slideId: string) {
           layout: 'default',
           boardSlug: 'unknown',
           locationSlug: 'unknown',
+          status: 'draft',
+          publishAt: null,
+          expireAt: null,
           published: false,
           dirty: false,
         },
@@ -89,7 +125,7 @@ export async function getBoardsForLocation(locationSlug: string): Promise<MenuBo
     slug: board.slug ?? board.boardSlug,
     boardSlug: board.boardSlug ?? board.slug,
     locationSlug: board.locationSlug ?? locationSlug,
-    slides: board.slides ?? [],
+    slides: board.slides ? normalizeSlides(board.slides) : [],
   }));
 }
 
@@ -110,8 +146,9 @@ export async function getSlidesForBoard(
   }
 
   const slides = await fetchJson<Slide[]>(`/locations/${locationSlug}/boards/${boardSlug}/slides`);
-  cacheSlides(locationSlug, boardSlug, slides);
-  return slides;
+  const normalized = normalizeSlides(slides);
+  cacheSlides(locationSlug, boardSlug, normalized);
+  return normalized;
 }
 
 export async function getBoardWithSlides(
@@ -189,4 +226,96 @@ export async function restoreVersion(slideId: string, versionId: string): Promis
 
   versionStore[slideId] = [restoredVersion, ...versions];
   return Promise.resolve(restored);
+}
+
+export async function updateSlideSchedule(
+  locationSlug: string,
+  boardSlug: string,
+  slideId: string,
+  updates: Partial<Pick<Slide, 'status' | 'publishAt' | 'expireAt'>>
+): Promise<Slide> {
+  const { previous, updated } = updateCachedSlides(locationSlug, boardSlug, (slides) =>
+    slides.map((slide) => {
+      if (slide.id !== slideId) return slide;
+
+      const nextStatus = updates.status ?? slide.status ?? 'draft';
+      const publishAt =
+        'publishAt' in updates ? updates.publishAt ?? null : slide.publishAt ?? null;
+      const expireAt = 'expireAt' in updates ? updates.expireAt ?? null : slide.expireAt ?? null;
+
+      return normalizeSlide({
+        ...slide,
+        ...updates,
+        status: nextStatus,
+        publishAt,
+        expireAt,
+        published: nextStatus === 'published',
+      });
+    })
+  );
+
+  const updatedSlide = updated.find((slide) => slide.id === slideId);
+  if (!updatedSlide) {
+    throw new Error(`Slide ${slideId} not found on board ${boardSlug}`);
+  }
+
+  try {
+    await simulateNetworkLatency(updatedSlide);
+    return updatedSlide;
+  } catch (error) {
+    cacheSlides(locationSlug, boardSlug, previous);
+    throw error;
+  }
+}
+
+export async function publishBoard(
+  locationSlug: string,
+  boardSlug: string,
+  publishedAt: string = new Date().toISOString()
+): Promise<Slide[]> {
+  const { previous, updated } = updateCachedSlides(locationSlug, boardSlug, (slides) =>
+    slides.map((slide) =>
+      normalizeSlide({
+        ...slide,
+        status: 'published',
+        publishAt: slide.publishAt ?? publishedAt,
+        published: true,
+        dirty: false,
+      })
+    )
+  );
+
+  try {
+    await simulateNetworkLatency(updated);
+    return updated;
+  } catch (error) {
+    cacheSlides(locationSlug, boardSlug, previous);
+    throw error;
+  }
+}
+
+export async function revertBoard(
+  locationSlug: string,
+  boardSlug: string
+): Promise<Slide[]> {
+  const { previous, updated } = updateCachedSlides(locationSlug, boardSlug, (slides) =>
+    slides.map((slide) =>
+      normalizeSlide({
+        ...slide,
+        status: 'draft',
+        publishAt: null,
+        expireAt: null,
+        published: false,
+        dirty: false,
+      })
+    )
+  );
+
+  try {
+    await simulateNetworkLatency(updated);
+    return updated;
+  } catch (error) {
+    cacheSlides(locationSlug, boardSlug, previous);
+    throw error;
+  }
 }
