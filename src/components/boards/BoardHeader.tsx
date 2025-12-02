@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { cacheSlides, publishBoard, revertBoard } from '../../api/client';
+import { cacheSlides, deleteBoard, publishBoard, revertBoard } from '../../api/client';
 import { useBoardsStore } from '../../store/boards';
 import { buildBoardUrl } from '../../utils/urls';
+import Presence from '../editor/Presence';
+import { useAuth } from '../../state/authSlice';
 
 interface BoardHeaderProps {
   name: string;
@@ -19,8 +21,10 @@ export function BoardHeader({
   const [copied, setCopied] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [reverting, setReverting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { slidesByBoard, setBoardSlides } = useBoardsStore();
+  const { canDeleteBoards } = useAuth();
   const slides = slidesByBoard[boardSlug] ?? [];
   const publishedCount = useMemo(
     () => slides.filter((slide) => slide.status === 'published').length,
@@ -81,12 +85,36 @@ export function BoardHeader({
     }
   };
 
+  const handleDeleteBoard = async () => {
+    if (!canDeleteBoards) {
+      setError('Only admins or owners can delete boards.');
+      return;
+    }
+
+    const confirmMessage = `Delete board "${name}"? All slides will be removed.`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteBoard(locationSlug, boardSlug);
+      setBoardSlides(boardSlug, []);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <header className="flex items-center justify-between gap-4 border-b border-gray-200 pb-4">
       <div>
         <p className="text-xs uppercase text-gray-500">Board</p>
         <h1 className="text-2xl font-bold text-gray-900">{name}</h1>
         {subtitle ? <p className="text-sm text-gray-600">{subtitle}</p> : null}
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+          <Presence boardSlug={boardSlug} locationSlug={locationSlug} />
+        </div>
       </div>
       <div className="flex flex-col items-end gap-2 text-right">
         <div className="flex items-center gap-2">
@@ -121,6 +149,14 @@ export function BoardHeader({
             className="rounded border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
           >
             {reverting ? 'Reverting…' : 'Revert to draft'}
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteBoard}
+            disabled={deleting || !canDeleteBoards}
+            className="rounded border border-red-200 px-3 py-1.5 text-sm font-semibold text-red-700 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-red-100 disabled:text-red-300"
+          >
+            {deleting ? 'Deleting…' : 'Delete board'}
           </button>
         </div>
         {error ? <p className="text-xs text-red-600">{error}</p> : null}

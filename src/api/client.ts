@@ -319,3 +319,8 @@ export async function revertBoard(
     throw error;
   }
 }
+
+export async function deleteBoard(locationSlug: string, boardSlug: string): Promise<void> {
+  clearSlideCache(locationSlug, boardSlug);
+  await simulateNetworkLatency(true, 120);
+}

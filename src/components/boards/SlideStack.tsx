@@ -186,8 +186,13 @@ function SortableSlide({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-700 hover:bg-red-50"
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-red-50 ${
+                  canDelete
+                    ? 'text-red-700'
+                    : 'cursor-not-allowed text-gray-300 hover:bg-transparent'
+                }`}
                 onClick={() => onDelete(slide.id)}
+                disabled={!canDelete}
               >
                 Delete
               </button>
@@ -214,6 +219,7 @@ export function SlideStack({
     setBoardSlides,
     maxSlides: storeMaxSlides,
   } = useBoardsStore();
+  const { canDeleteSlides } = useAuth();
   const slides = useMemo(() => slidesByBoard[boardSlug] ?? [], [slidesByBoard, boardSlug]);
   const maxAllowed = maxSlides ?? storeMaxSlides;
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
@@ -316,6 +322,11 @@ export function SlideStack({
   };
 
   const handleDelete = (slideId: string) => {
+    if (!canDeleteSlides) {
+      window.alert('You need editor access to delete slides.');
+      return;
+    }
+
     const slide = slides.find((item) => item.id === slideId);
     const confirmMessage = `Delete slide${slide?.title ? ` "${slide.title}"` : ''}? This cannot be undone.`;
     if (window.confirm(confirmMessage)) {
