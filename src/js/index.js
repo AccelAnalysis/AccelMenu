@@ -4,6 +4,8 @@ import { TileEditor } from './components/TileEditor.js';
 import { AdminPanel } from './components/AdminPanel.js';
 import { TILE_TYPES } from './utils/constants.js';
 import { deepClone, generateId } from './utils/helpers.js';
+import { initializeMonitoring, captureFeedback } from '../utils/monitoring.ts';
+import { isNewEditorEnabled } from '../utils/featureFlags.ts';
 
 class App {
   constructor() {
@@ -12,6 +14,7 @@ class App {
     this.editor = null;
     this.adminPanel = null;
     this.isEditMode = false;
+    this.monitoringReady = initializeMonitoring({ tracesSampleRate: 0.05 });
     
     // Bind methods
     this.handleCanvasClick = this.handleCanvasClick.bind(this);
@@ -35,6 +38,7 @@ class App {
    */
   init() {
     this.setupUI();
+    this.setupFeedbackWidget();
     this.setupEventListeners();
     
     // Initialize editor
@@ -209,6 +213,141 @@ class App {
       }
     `;
     document.head.appendChild(style);
+  }
+
+  /**
+   * Add a lightweight feedback widget for early adopters.
+   */
+  setupFeedbackWidget() {
+    if (!isNewEditorEnabled() || typeof document === 'undefined') return;
+
+    const target = document.body || this.container;
+    if (!target) return;
+
+    const feedbackContainer = document.createElement('div');
+    Object.assign(feedbackContainer.style, {
+      position: 'fixed',
+      bottom: '20px',
+      left: '20px',
+      background: '#0f172a',
+      color: '#e2e8f0',
+      padding: '12px',
+      borderRadius: '12px',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+      maxWidth: '320px',
+      zIndex: '999998',
+      fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'Early adopters: tell us what you think';
+    Object.assign(title.style, {
+      fontWeight: '700',
+      fontSize: '14px',
+      marginBottom: '8px',
+    });
+
+    const form = document.createElement('form');
+    form.style.display = 'none';
+    form.style.marginTop = '8px';
+
+    const textarea = document.createElement('textarea');
+    textarea.placeholder = 'What should we improve in the new editor?';
+    Object.assign(textarea.style, {
+      width: '100%',
+      minHeight: '60px',
+      padding: '8px',
+      borderRadius: '8px',
+      border: '1px solid #1e293b',
+      resize: 'vertical',
+      fontFamily: 'inherit',
+    });
+
+    const email = document.createElement('input');
+    email.type = 'email';
+    email.placeholder = 'Email (optional)';
+    Object.assign(email.style, {
+      width: '100%',
+      marginTop: '6px',
+      padding: '8px',
+      borderRadius: '8px',
+      border: '1px solid #1e293b',
+      fontFamily: 'inherit',
+    });
+
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.textContent = 'Send feedback';
+    Object.assign(submit.style, {
+      marginTop: '10px',
+      width: '100%',
+      padding: '10px 12px',
+      background: '#22d3ee',
+      color: '#0f172a',
+      fontWeight: '700',
+      border: 'none',
+      borderRadius: '8px',
+      cursor: 'pointer',
+    });
+
+    const status = document.createElement('div');
+    Object.assign(status.style, {
+      marginTop: '6px',
+      fontSize: '12px',
+      color: '#a5f3fc',
+    });
+
+    form.appendChild(textarea);
+    form.appendChild(email);
+    form.appendChild(submit);
+    form.appendChild(status);
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const message = textarea.value.trim();
+      if (!message) {
+        status.textContent = 'Please add a quick note before sending.';
+        return;
+      }
+
+      captureFeedback({
+        message,
+        email: email.value.trim() || undefined,
+        tags: {
+          feature: 'new-editor',
+          cohort: 'early-adopter',
+        },
+      });
+
+      status.textContent = 'Thanks! Your feedback helps shape the new editor.';
+      textarea.value = '';
+    });
+
+    const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.textContent = 'Share feedback';
+    Object.assign(toggleButton.style, {
+      background: '#22c55e',
+      color: '#0b1224',
+      border: 'none',
+      borderRadius: '10px',
+      padding: '10px 12px',
+      fontWeight: '700',
+      cursor: 'pointer',
+      width: '100%',
+    });
+
+    toggleButton.addEventListener('click', () => {
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      status.textContent = '';
+    });
+
+    feedbackContainer.appendChild(title);
+    feedbackContainer.appendChild(toggleButton);
+    feedbackContainer.appendChild(form);
+
+    target.appendChild(feedbackContainer);
   }
 
   /**
